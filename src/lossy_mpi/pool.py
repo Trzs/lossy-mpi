@@ -46,9 +46,6 @@ class Pool(object):
         self._n_tries = n_tries
 
         self._last_req = None
-        self.cts = 0
-        self.ctr = 0
-
  
         self._mask = [Status.UNINIT for i in range(self.size)]
 
@@ -109,27 +106,19 @@ class Pool(object):
         place
         """
         for i, req in reqs:
-            print(f"{i=}, {req=}")
             # Default to failover
             data[i] = failover
 
             # try n_tries many times to get a response, if none is received in
             # $timeout seconds, the failover value is not overwritten
             for _ in range(self.n_tries):
-                status = MPI.Status()
-                # if self.comm.iprobe(source=i, tag=tag, status=status):
-                flag, message = req.test(status=status)
+                # status = MPI.Status()
+                flag, message = req.test()
                 if flag:
-                    print(f"{status.count=}")
-                    print(f"Starting recv from rank {i}", flush=True)
-                    # data[i] = req.wait()
                     data[i] = message
-                    print(f"Receiving {data[i]=} from rank {i}", flush=True)
                     break
                 else:
-                    print(f"{status.count=}")
                     sleep(self.timeout/self.n_tries)
-            print(f"done {i=}")
             
     def comm_mask(self):
         """
@@ -151,24 +140,15 @@ class Pool(object):
                     continue
 
                 # receive mask
-                self.ctr += 1;
-                print(f"Starting {self.ctr} recv from rank {i}")
                 reqs.append(
                     (i, self.comm.irecv(source=i, tag=1))
                 )
-                # req = self.comm.irecv(source=i, tag=1)
-                # self.mask[i] = req.wait() 
         else:
             # make sure that the channel is clear
             if self.last_req_completed and (self._last_req is not None):
                 self._last_req.wait()
 
             # send mask
-            self.cts += 1;
-            print(
-                f"Rank {self.rank} is {self.cts} sending {self.status} to {self.root}",
-                flush=True
-            )
             self._last_req = self.comm.isend(self.status, dest=self.root, tag=1)
 
         # complete communications
