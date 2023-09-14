@@ -113,13 +113,15 @@ class Pool(object):
 
             # try n_tries many times to get a response, if none is received in
             # $timeout seconds, the failover value is not overwritten
-            while self.n_tries:
+            for _ in range(self.n_tries):
                 if self.comm.iprobe(source=i, tag=tag):
+                    print(f"Starting recv from rank {i}", flush=True)
                     data[i] = req.wait()
-                    success = True
+                    print(f"Receiving {data[i]} from rank {i}", flush=True)
                     break
                 else:
                     sleep(self.timeout/self.n_tries)
+            print(f"done {i=}")
             
     def comm_mask(self):
         """
@@ -147,6 +149,7 @@ class Pool(object):
         else:
             # send mask -- but only if the channel is clear
             if self.last_req_completed:
+                print(f"Rank {self.rank} is sending {self.status}", flush=True)
                 self._last_req = self.comm.isend(
                     self.status, dest=self.root, tag=1
                 )
@@ -191,13 +194,11 @@ class Pool(object):
         """
         Drop the current rank for the pool
         """
-
         if not self.is_root:
             return False
 
         break_root = True
         for i, status in enumerate(self.mask):
-
             if i == self.root:
                 continue
 

@@ -30,6 +30,7 @@ data   = None
 while True:
     # decide on current status (i.e. if current rank has data to send)
     if n_data <= 0:
+        print(f"Rank {rank} is done", flush=True)
         pool.drop()
 
     # communicate status to receiving rank
@@ -59,6 +60,7 @@ while True:
     if rank == root:
         print(all_data)
 
+print(rank, flush=True)
 
 last_n_data = comm.gather(n_data, root=root)
 last_data   = comm.gather(data, root=root)
