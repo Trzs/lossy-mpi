@@ -21,7 +21,7 @@ size = comm.Get_size()
 root = 0
 
 
-pool = Pool(comm, root, timeout=20, n_tries=10)
+pool = Pool(comm, root, timeout=2, n_tries=10)
 pool.ready()
 
 n_data = randint(1, 10)

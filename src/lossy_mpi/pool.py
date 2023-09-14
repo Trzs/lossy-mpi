@@ -7,7 +7,6 @@ from time   import sleep
 
 
 class AutoEnum(Enum):
-
     def _generate_next_value_(name, start, count, last_values):
         return count
 
@@ -47,6 +46,9 @@ class Pool(object):
         self._n_tries = n_tries
 
         self._last_req = None
+        self.cts = 0
+        self.ctr = 0
+
  
         self._mask = [Status.UNINIT for i in range(self.size)]
 
@@ -114,12 +116,18 @@ class Pool(object):
             # try n_tries many times to get a response, if none is received in
             # $timeout seconds, the failover value is not overwritten
             for _ in range(self.n_tries):
-                if self.comm.iprobe(source=i, tag=tag):
+                status = MPI.Status()
+                # if self.comm.iprobe(source=i, tag=tag, status=status):
+                flag, message = req.test(status=status)
+                if flag:
+                    print(f"{status.count=}")
                     print(f"Starting recv from rank {i}", flush=True)
-                    data[i] = req.wait()
-                    print(f"Receiving {data[i]} from rank {i}", flush=True)
+                    # data[i] = req.wait()
+                    data[i] = message
+                    print(f"Receiving {data[i]=} from rank {i}", flush=True)
                     break
                 else:
+                    print(f"{status.count=}")
                     sleep(self.timeout/self.n_tries)
             print(f"done {i=}")
             
@@ -143,16 +151,25 @@ class Pool(object):
                     continue
 
                 # receive mask
+                self.ctr += 1;
+                print(f"Starting {self.ctr} recv from rank {i}")
                 reqs.append(
                     (i, self.comm.irecv(source=i, tag=1))
                 )
+                # req = self.comm.irecv(source=i, tag=1)
+                # self.mask[i] = req.wait() 
         else:
-            # send mask -- but only if the channel is clear
-            if self.last_req_completed:
-                print(f"Rank {self.rank} is sending {self.status}", flush=True)
-                self._last_req = self.comm.isend(
-                    self.status, dest=self.root, tag=1
-                )
+            # make sure that the channel is clear
+            if self.last_req_completed and (self._last_req is not None):
+                self._last_req.wait()
+
+            # send mask
+            self.cts += 1;
+            print(
+                f"Rank {self.rank} is {self.cts} sending {self.status} to {self.root}",
+                flush=True
+            )
+            self._last_req = self.comm.isend(self.status, dest=self.root, tag=1)
 
         # complete communications
         if self.is_root:
