@@ -1,7 +1,11 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from time import sleep 
+from logging import getLogger
+from time    import sleep 
+
+
+LOGGER = getLogger(__name__)
 
 
 class TimeoutComm(object):
@@ -15,6 +19,10 @@ class TimeoutComm(object):
         self._n_tries = n_tries
 
         self._last_req = None
+
+        LOGGER.debug(
+            f"Initialized Timeout Communicator with {timeout=} and {n_tries=}"
+        )
 
     @property
     def comm(self):
@@ -49,16 +57,23 @@ class TimeoutComm(object):
         """
         Check if the last request has been completed
         """
+        LOGGER.debug(f"Checking {self._last_req=}")
+
         if self._last_req is None:
             return True
+
         flag, _ = self._last_req.test()
+
+        LOGGER.debug(f"Returning {flag=}")
         return flag
 
-    def rec(self, data, failover, reqs, tag):
+    def safe_req_wait(self, data, failover, reqs, tag):
         """
         Collect data from reqs with tag -- if timed out, place $failover in its
         place
         """
+        LOGGER.debug("Entering safe wait")
+
         for i, req in reqs:
             # Default to failover
             data[i] = failover
@@ -66,9 +81,10 @@ class TimeoutComm(object):
             # $timeout seconds, the failover value is not overwritten
             for _ in range(self.n_tries):
                 flag, message = req.test()
+                LOGGER.debug(f"Looking for message {i=}: {flag=}")
                 if flag:
                     data[i] = message
                     break
                 else:
+                    LOGGER.debug(f"Sleeping for message {i=}")
                     sleep(self.timeout/self.n_tries)
-

@@ -1,9 +1,13 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from enum import Enum, auto, unique
+from logging import getLogger
+from enum    import Enum, auto, unique
 
 from .comms import TimeoutComm
+
+
+LOGGER = getLogger(__name__)
 
 
 class AutoEnum(Enum):
@@ -45,6 +49,8 @@ class Pool(TimeoutComm):
 
         self._mask = [Status.UNINIT for i in range(self.size)]
 
+        LOGGER.debug(f"Initialized pool at {root=}")
+
     @property
     def status(self):
         return self._status
@@ -72,10 +78,12 @@ class Pool(TimeoutComm):
         Gather data from masked ranks -- excluding "dead ranks". If a timemout
         occurs, assign the `failover` value.
         """
+        LOGGER.debug("Entering gather")
         reqs = list()
 
         # initiate communications ----------------------------------------------
         if self.is_root:
+            LOGGER.debug(f"Root is initializing communications on {self.rank=}")
             # Initiate comms with all ranks
             for i in range(self.size):
                 # don't do anything for the root, except updating the data array
@@ -84,27 +92,34 @@ class Pool(TimeoutComm):
                     continue
                 # don't receive mask data from ranks that are set to "DONE"
                 if Status.is_dead(self.mask[i]):
+                    LOGGER.debug(f"Source {i=} is considered DEAD, skipping")
                     continue
                 # receive mask
-                reqs.append(
-                    (i, self.comm.irecv(source=i, tag=1))
-                )
+                reqs.append((i, self.comm.irecv(source=i, tag=1)))
+                LOGGER.debug(f"Added source {i=} to requests")
         else:
             # make sure that the channel is clear
             if self.last_req_completed and (self._last_req is not None):
-                self._last_req.wait()
-            # send mask
-            self._last_req = self.comm.isend(data_in, dest=self.root, tag=1)
+                LOGGER.debug(
+                    f"Waiting for last isend to complete on {self.rank=}"
+                )
+                self.last_req.wait()
+            # send data
+            LOGGER.debug(f"Initiating isend on {self.rank=}")
+            self.last_req = self.comm.isend(data_in, dest=self.root, tag=1)
 
         # complete communications ----------------------------------------------
         if self.is_root:
             # Collect requests with timeout
-            self.rec(data_out, failover, reqs, 1)
+            LOGGER.debug(f"Collecting requests on {self.rank=}")
+            self.safe_req_wait(data_out, failover, reqs, 1)
 
     def comm_mask(self):
         """
         Syncs masks accross all ranks -- excluding "dead ranks"
         """
+        LOGGER.debug(f"Start mask synk on {self.rank=}")
+
         self.gather(self.status, self.mask, Status.TIMEOUT)
 
     def comm_data(self, data):

@@ -32,6 +32,9 @@ while True:
     if n_data <= 0:
         pool.drop()
 
+    if rank == 2:
+        break
+
     # communicate status to receiving rank
     pool.comm_mask()
 
