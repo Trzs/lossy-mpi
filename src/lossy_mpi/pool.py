@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from mpi4py import MPI
-from enum   import Enum, auto, unique
-from time   import sleep 
+from enum import Enum, auto, unique
+
+from .comms import TimeoutComm
 
 
 class AutoEnum(Enum):
@@ -18,35 +18,31 @@ class Status(AutoEnum):
     UNINIT = auto()
     TIMEOUT = auto()
 
+    @classmethod
+    def is_dead(cls, rank):
+        """
+        Return True if status is DONE or TIMEOUT
+        """
+        if rank is cls.DONE:
+            return True
 
-def is_dead(rank):
-    if rank is Status.DONE:
-        return True
+        if rank is cls.TIMEOUT:
+            return True
 
-    if rank is Status.TIMEOUT:
-        return True
-
-    return False
+        return False
 
 
-class Pool(object):
+class Pool(TimeoutComm):
     def __init__(self, comm, root, timeout, n_tries):
         # Start everything in an uninitialized state
         self._status = Status.UNINIT
 
         # Assumption: com, rank, size, and root do not change
-        self._comm = comm
-        self._size = comm.Get_size()
-        self._rank = comm.Get_rank()
+        super().__init__(comm, timeout, n_tries)
 
         self._root    = root
         self._is_root = self.rank == root
 
-        self._timeout = timeout
-        self._n_tries = n_tries
-
-        self._last_req = None
- 
         self._mask = [Status.UNINIT for i in range(self.size)]
 
     @property
@@ -54,28 +50,8 @@ class Pool(object):
         return self._status
 
     @property
-    def comm(self):
-        return self._comm
-
-    @property
-    def size(self):
-        return self._size
-
-    @property
-    def rank(self):
-        return self._rank
-
-    @property
     def root(self):
         return self._root
-
-    @property
-    def timeout(self):
-        return self._timeout
-
-    @property
-    def n_tries(self):
-        return self._n_tries
 
     @property
     def is_root(self):
@@ -85,60 +61,30 @@ class Pool(object):
     def mask(self):
         return self._mask
 
-    @property
-    def last_req_completed(self):
-        """
-        Check if the last request has been completed
-        """
-        if self._last_req is None:
-            return True
-        return self._last_req.test()
-
     def ready(self):
         self._status = Status.READY
 
     def drop(self):
         self._status = Status.DONE
 
-    def timeout_rec(self, data, failover, reqs, tag):
+    def gather(self, data_in, data_out, failover):
         """
-        Collect data from reqs with tag -- if timed out, place $failover in its
-        place
-        """
-        for i, req in reqs:
-            # Default to failover
-            data[i] = failover
-
-            # try n_tries many times to get a response, if none is received in
-            # $timeout seconds, the failover value is not overwritten
-            for _ in range(self.n_tries):
-                # status = MPI.Status()
-                flag, message = req.test()
-                if flag:
-                    data[i] = message
-                    break
-                else:
-                    sleep(self.timeout/self.n_tries)
-            
-    def comm_mask(self):
-        """
-        Syncs masks accross all ranks -- excluding "dead ranks"
+        Gather data from masked ranks -- excluding "dead ranks". If a timemout
+        occurs, assign the `failover` value.
         """
         reqs = list()
 
-        # initiate communications
+        # initiate communications ----------------------------------------------
         if self.is_root:
             # Initiate comms with all ranks
             for i in range(self.size):
-                # don't do anything for the root
+                # don't do anything for the root, except updating the data array
                 if i == self.root:
-                    self.mask[i] == self.status
+                    data_out[i] == data_in
                     continue
-
                 # don't receive mask data from ranks that are set to "DONE"
-                if is_dead(self.mask[i]):
+                if Status.is_dead(self.mask[i]):
                     continue
-
                 # receive mask
                 reqs.append(
                     (i, self.comm.irecv(source=i, tag=1))
@@ -147,15 +93,19 @@ class Pool(object):
             # make sure that the channel is clear
             if self.last_req_completed and (self._last_req is not None):
                 self._last_req.wait()
-
             # send mask
-            self._last_req = self.comm.isend(self.status, dest=self.root, tag=1)
+            self._last_req = self.comm.isend(data_in, dest=self.root, tag=1)
 
-        # complete communications
+        # complete communications ----------------------------------------------
         if self.is_root:
             # Collect requests with timeout
-            self.timeout_rec(self.mask, Status.TIMEOUT, reqs, 1)
+            self.rec(data_out, failover, reqs, 1)
 
+    def comm_mask(self):
+        """
+        Syncs masks accross all ranks -- excluding "dead ranks"
+        """
+        self.gather(self.status, self.mask, Status.TIMEOUT)
 
     def comm_data(self, data):
         """
