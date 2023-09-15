@@ -32,11 +32,8 @@ while True:
     if n_data <= 0:
         pool.drop()
 
-    if rank == 2:
-        break
-
     # communicate status to receiving rank
-    pool.comm_mask()
+    pool.sync_mask()
 
     # decide to break (root checks if all done) + root: print mask
     if rank == root:
@@ -56,7 +53,7 @@ while True:
         n_data -= 1
 
     # communicate data
-    all_data = pool.comm_data(data)
+    all_data = pool.gather(data)
 
     # print data
     if rank == root:

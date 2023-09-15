@@ -3,9 +3,30 @@
 
 from logging import getLogger
 from time    import sleep 
+from enum    import auto, unique
+
+from .       import AutoEnum
 
 
 LOGGER = getLogger(__name__)
+
+
+@unique
+class OperatorMode(AutoEnum):
+    UPPER = auto()
+    LOWER = auto()
+
+    @classmethod
+    def get(cls, op, comm):
+        """
+        Returns the mpi4py function corresponding to the operator $op
+        """
+        if op == cls.UPPER:
+            return comm.Irecv, comm.Isend
+        if op == cls.LOWER:
+            return comm.irecv, comm.isend
+
+        raise RuntimeError(f"Invalid Mode {op=}")
 
 
 class TimeoutComm(object):
