@@ -40,6 +40,7 @@ class TimeoutComm(object):
         self._n_tries = n_tries
 
         self._last_req = None
+        self._last_req_message = None
 
         LOGGER.debug(
             f"Initialized Timeout Communicator with {timeout=} and {n_tries=}"
@@ -83,7 +84,7 @@ class TimeoutComm(object):
         if self._last_req is None:
             return True
 
-        flag, _ = self._last_req.test()
+        flag, self._last_req_message = self._last_req.test()
 
         LOGGER.debug(f"Returning {flag=}")
         return flag

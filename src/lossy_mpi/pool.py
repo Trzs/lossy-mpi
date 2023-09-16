@@ -10,6 +10,11 @@ from .comms  import TimeoutComm, OperatorMode
 
 LOGGER = getLogger(__name__)
 
+@unique
+class Signal(AutoEnum):
+    OK = auto()
+    TIMEOUT = auto()
+
 
 @unique
 class Status(AutoEnum):
@@ -69,13 +74,13 @@ class Pool(TimeoutComm):
     def drop(self):
         self._status = Status.DONE
 
-    def _exec_transaction(self, sendbuf, recvbuf, failover, mode):
+    def _exec_gather_transaction(self, sendbuf, recvbuf, failover, mode):
         """
         Gather data from masked ranks -- excluding "dead ranks". If a timemout
         occurs, assign the `failover` value.
         """
-        LOGGER.debug(f"Entering transacton, using {mode=}")
-        init_op, fini_op = OperatorMode.get(mode, self.comm)
+        LOGGER.debug(f"Entering gather transacton, using {mode=}")
+        recv_op, send_op = OperatorMode.get(mode, self.comm)
         reqs = list()
 
         # initiate communications ----------------------------------------------
@@ -92,7 +97,7 @@ class Pool(TimeoutComm):
                     LOGGER.debug(f"Source {i=} is considered DEAD, skipping")
                     continue
                 # receive mask
-                reqs.append((i, init_op(source=i, tag=1)))
+                reqs.append((i, recv_op(source=i, tag=1)))
                 LOGGER.debug(f"Added source {i=} to requests")
         else:
             # make sure that the channel is clear
@@ -103,7 +108,7 @@ class Pool(TimeoutComm):
                 self.last_req.wait()
             # send data
             LOGGER.debug(f"Initiating isend on {self.rank=}")
-            self.last_req = fini_op(sendbuf, dest=self.root, tag=1)
+            self.last_req = send_op(sendbuf, dest=self.root, tag=1)
 
         # complete communications ----------------------------------------------
         if self.is_root:
@@ -111,13 +116,56 @@ class Pool(TimeoutComm):
             LOGGER.debug(f"Collecting requests on {self.rank=}")
             self.safe_req_wait(recvbuf, failover, reqs, 1)
 
+    def _exec_scatter_transaction(self, sendbuf, recvbuf, failover, mode):
+        """
+        Scatter data to masked ranks -- excluding "dead ranks". If a timemout
+        occurs, assign the `failover` value.
+        """
+        LOGGER.debug(f"Entering scatter transacton, using {mode=}")
+        recv_op, send_op = OperatorMode.get(mode, self.comm)
+        reqs = list()
+
+        # initiate communications ----------------------------------------------
+        if self.is_root:
+            LOGGER.debug(f"Root is initializing communications on {self.rank=}")
+            # Initiate comms with all ranks
+            for i in range(self.size):
+                # don't do anything for the root, except updating the data array
+                if i == self.root:
+                    recvbuf[i] == sendbuf
+                    continue
+                # don't receive mask data from ranks that are set to "DONE"
+                if Status.is_dead(self.mask[i]):
+                    LOGGER.debug(f"Source {i=} is considered DEAD, skipping")
+                    continue
+                # receive mask
+                reqs.append((i, recv_op(source=i, tag=1)))
+                LOGGER.debug(f"Added source {i=} to requests")
+        else:
+            # make sure that the channel is clear
+            if self.last_req_completed and (self._last_req is not None):
+                LOGGER.debug(
+                    f"Waiting for last isend to complete on {self.rank=}"
+                )
+                self.last_req.wait()
+            # send data
+            LOGGER.debug(f"Initiating isend on {self.rank=}")
+            self.last_req = send_op(sendbuf, dest=self.root, tag=1)
+
+        # complete communications ----------------------------------------------
+        if self.is_root:
+            # Collect requests with timeout
+            LOGGER.debug(f"Collecting requests on {self.rank=}")
+            self.safe_req_wait(recvbuf, failover, reqs, 1)
+
+
     def Gather(self, sendbuf, recvbuf, failover=None):
         """
         Gather data from masked ranks -- excluding "dead ranks". If a timemout
         occurs, assign the `failover` value. Executed in UPPER mode
         """
         LOGGER.debug(f"Start Gather on {self.rank=}")
-        self._exec_transaction(
+        self._exec_gather_transaction(
             sendbuf, recvbuf, failover, OperatorMode.UPPER
         )
  
@@ -126,19 +174,48 @@ class Pool(TimeoutComm):
         Gather data from masked ranks -- excluding "dead ranks". If a timemout
         occurs, assign the `failover` value. Executed in UPPER mode
         """
-        LOGGER.debug(f"Start Gather on {self.rank=}")
+        LOGGER.debug(f"Start gather on {self.rank=}")
         recvbuf = [failover for i in range(self.size)]
-        self._exec_transaction(
+        self._exec_gather_transaction(
             data, recvbuf, failover, OperatorMode.LOWER
         )
         return recvbuf
+
+    def Bcast(self, sendbuf, recvbuf, failover=None):
+        pass
+
+    def bcast(self, sendbuf, recvbuf, failover=None):
+        pass
+
+    def Barrier(self):
+        """
+        Barrier on all masked ranks -- exlcuding "dead ranks". Non-dead ranks
+        can still time out. If that occurs, the barrier proceeds.
+        """
+        LOGGER.debug(f"Start Barrier on {self.rank=}")
+        sendbuf = [Signal.OK for i in range(self.size)]
+        recvbuf = [None for i in range(self.size)]
+        self._exec_gather_transaction(
+            sendbuf, recvbuf, Signal.TIMEOUT, OperatorMode.LOWER
+        )
+        if Signal.TIMEOUT in recvbuf:
+            LOGGER.info(f"Receiving unexpected timeouts on {self.rank=}")
+
+    def barrier(self):
+        """
+        Barrier on all masked ranks -- exlcuding "dead ranks". Non-dead ranks
+        can still time out. If that occurs, the barrier proceeds. Same as
+        uppercase "Barrier"
+        """
+        LOGGER.debug(f"Start barrier on {self.rank=}")
+        self.Barrier()
 
     def sync_mask(self):
         """
         Syncs masks accross all ranks -- excluding "dead ranks"
         """
         LOGGER.debug(f"Start mask synk on {self.rank=}")
-        self._exec_transaction(
+        self._exec_gather_transaction(
             self.status, self.mask, Status.TIMEOUT, OperatorMode.LOWER
         )
 
