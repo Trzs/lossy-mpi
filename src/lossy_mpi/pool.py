@@ -1,10 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from logging import getLogger
 from enum    import auto, unique
 
-from .       import AutoEnum
+from .       import getLogger, AutoEnum
 from .comms  import TimeoutComm, OperatorMode
 
 
@@ -50,7 +49,7 @@ class Pool(TimeoutComm):
 
         self._mask = [Status.UNINIT for i in range(self.size)]
 
-        LOGGER.debug(f"Initialized pool at {root=}")
+        LOGGER.debug(f"Initialized pool at {root=}", comm=self)
 
     @property
     def status(self):
@@ -79,13 +78,13 @@ class Pool(TimeoutComm):
         Gather data from masked ranks -- excluding "dead ranks". If a timemout
         occurs, assign the `failover` value.
         """
-        LOGGER.debug(f"Entering gather transacton, using {mode=}")
+        LOGGER.debug(f"Entering gather transacton, using {mode=}", comm=self)
         recv_op, send_op = OperatorMode.get(mode, self.comm)
         reqs = list()
 
         # initiate communications ----------------------------------------------
         if self.is_root:
-            LOGGER.debug(f"Root is initializing communications on {self.rank=}")
+            LOGGER.debug("Root is initializing communications", comm=self)
             # Initiate comms with all ranks
             for i in range(self.size):
                 # don't do anything for the root, except updating the data array
@@ -94,26 +93,24 @@ class Pool(TimeoutComm):
                     continue
                 # don't receive mask data from ranks that are set to "DONE"
                 if Status.is_dead(self.mask[i]):
-                    LOGGER.debug(f"Source {i=} is considered DEAD, skipping")
+                    LOGGER.debug(f"Source {i=} is considered DEAD, skipping", comm=self)
                     continue
                 # receive mask
                 reqs.append((i, recv_op(source=i, tag=1)))
-                LOGGER.debug(f"Added source {i=} to requests")
+                LOGGER.debug(f"Added source {i=} to requests", comm=self)
         else:
             # make sure that the channel is clear
             if self.last_req_completed and (self._last_req is not None):
-                LOGGER.debug(
-                    f"Waiting for last isend to complete on {self.rank=}"
-                )
+                LOGGER.debug("Waiting for last isend to complete", comm=self)
                 self.last_req.wait()
             # send data
-            LOGGER.debug(f"Initiating isend on {self.rank=}")
+            LOGGER.debug("Initiating isend", comm=self)
             self.last_req = send_op(sendbuf, dest=self.root, tag=1)
 
         # complete communications ----------------------------------------------
         if self.is_root:
             # Collect requests with timeout
-            LOGGER.debug(f"Collecting requests on {self.rank=}")
+            LOGGER.debug("Collecting requests", comm=self)
             self.safe_req_wait(recvbuf, failover, reqs, 1)
 
     def _exec_scatter_transaction(self, sendbuf, recvbuf, failover, mode):
@@ -121,13 +118,13 @@ class Pool(TimeoutComm):
         Scatter data to masked ranks -- excluding "dead ranks". If a timemout
         occurs, assign the `failover` value.
         """
-        LOGGER.debug(f"Entering scatter transacton, using {mode=}")
+        LOGGER.debug(f"Entering scatter transacton, using {mode=}", comm=self)
         recv_op, send_op = OperatorMode.get(mode, self.comm)
         reqs = list()
 
         # initiate communications ----------------------------------------------
         if self.is_root:
-            LOGGER.debug(f"Root is initializing communications on {self.rank=}")
+            LOGGER.debug("Root is initializing communications", comm=self)
             # Initiate comms with all ranks
             for i in range(self.size):
                 # don't do anything for the root, except updating the data array
@@ -136,26 +133,24 @@ class Pool(TimeoutComm):
                     continue
                 # don't receive mask data from ranks that are set to "DONE"
                 if Status.is_dead(self.mask[i]):
-                    LOGGER.debug(f"Source {i=} is considered DEAD, skipping")
+                    LOGGER.debug(f"Source {i=} is considered DEAD, skipping", comm=self)
                     continue
                 # receive mask
                 reqs.append((i, recv_op(source=i, tag=1)))
-                LOGGER.debug(f"Added source {i=} to requests")
+                LOGGER.debug(f"Added source {i=} to requests", comm=self)
         else:
             # make sure that the channel is clear
             if self.last_req_completed and (self._last_req is not None):
-                LOGGER.debug(
-                    f"Waiting for last isend to complete on {self.rank=}"
-                )
+                LOGGER.debug("Waiting for last isend to complete", comm=self)
                 self.last_req.wait()
             # send data
-            LOGGER.debug(f"Initiating isend on {self.rank=}")
+            LOGGER.debug("Initiating isend", comm=self)
             self.last_req = send_op(sendbuf, dest=self.root, tag=1)
 
         # complete communications ----------------------------------------------
         if self.is_root:
             # Collect requests with timeout
-            LOGGER.debug(f"Collecting requests on {self.rank=}")
+            LOGGER.debug("Collecting requests", comm=self)
             self.safe_req_wait(recvbuf, failover, reqs, 1)
 
 
@@ -164,7 +159,7 @@ class Pool(TimeoutComm):
         Gather data from masked ranks -- excluding "dead ranks". If a timemout
         occurs, assign the `failover` value. Executed in UPPER mode
         """
-        LOGGER.debug(f"Start Gather on {self.rank=}")
+        LOGGER.debug("Start Gather", comm=self)
         self._exec_gather_transaction(
             sendbuf, recvbuf, failover, OperatorMode.UPPER
         )
@@ -174,7 +169,7 @@ class Pool(TimeoutComm):
         Gather data from masked ranks -- excluding "dead ranks". If a timemout
         occurs, assign the `failover` value. Executed in UPPER mode
         """
-        LOGGER.debug(f"Start gather on {self.rank=}")
+        LOGGER.debug("Start gather", comm=self)
         recvbuf = [failover for i in range(self.size)]
         self._exec_gather_transaction(
             data, recvbuf, failover, OperatorMode.LOWER
@@ -192,14 +187,14 @@ class Pool(TimeoutComm):
         Barrier on all masked ranks -- exlcuding "dead ranks". Non-dead ranks
         can still time out. If that occurs, the barrier proceeds.
         """
-        LOGGER.debug(f"Start Barrier on {self.rank=}")
+        LOGGER.debug("Start Barrier", comm=self)
         sendbuf = [Signal.OK for i in range(self.size)]
         recvbuf = [None for i in range(self.size)]
         self._exec_gather_transaction(
             sendbuf, recvbuf, Signal.TIMEOUT, OperatorMode.LOWER
         )
         if Signal.TIMEOUT in recvbuf:
-            LOGGER.info(f"Receiving unexpected timeouts on {self.rank=}")
+            LOGGER.info("Receiving unexpected timeouts", comm=self)
 
     def barrier(self):
         """
@@ -207,14 +202,14 @@ class Pool(TimeoutComm):
         can still time out. If that occurs, the barrier proceeds. Same as
         uppercase "Barrier"
         """
-        LOGGER.debug(f"Start barrier on {self.rank=}")
+        LOGGER.debug("Start barrier", comm=self)
         self.Barrier()
 
     def sync_mask(self):
         """
         Syncs masks accross all ranks -- excluding "dead ranks"
         """
-        LOGGER.debug(f"Start mask synk on {self.rank=}")
+        LOGGER.debug("Start sync'ing masks", comm=self)
         self._exec_gather_transaction(
             self.status, self.mask, Status.TIMEOUT, OperatorMode.LOWER
         )
