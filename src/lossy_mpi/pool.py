@@ -88,7 +88,7 @@ class Pool(TimeoutComm):
             for i in range(self.size):
                 # don't do anything for the root, except updating the data array
                 if i == self.root:
-                    recvbuf[i] == sendbuf
+                    recvbuf[i] = sendbuf
                     continue
                 # don't receive mask data from ranks that are set to "DONE"
                 if Status.is_dead(self.mask[i]):
@@ -131,7 +131,7 @@ class Pool(TimeoutComm):
             for i in range(self.size):
                 # don't do anything for the root, except updating the data array
                 if i == self.root:
-                    recvbuf[recvbuf_result_idx] == sendbuf
+                    recvbuf[recvbuf_result_idx] = sendbuf
                     continue
                 # don't receive mask data from ranks that are set to "DONE"
                 if Status.is_dead(self.mask[i]):
@@ -232,6 +232,7 @@ class Pool(TimeoutComm):
         """
         Drop the current rank for the pool
         """
+        LOGGER.debug("Dropping this rank from pool", comm=self)
         if not self.is_root:
             return False
 

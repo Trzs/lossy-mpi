@@ -28,10 +28,10 @@ n_data = randint(1, 10)
 data   = None
 
 while True:
-    # simulate graceful failure: if no more work, drop rank from pool
+    # simulate unexpected failure: if no more work, then stop responding
     # decide on current status (i.e. if current rank has data to send)
     if n_data <= 0:
-        pool.drop()
+        break
 
     # update mask -- this is not necessary, but it does speeding things up
     pool.sync_mask()
@@ -54,19 +54,10 @@ while True:
 
     # communicate data
     all_data = pool.gather(data)
-    # construct payload for bcast: the sum to all values on all ranks
-    if rank == root:
-        sum_data = sum([d for d in all_data if d is not None])
-    else:
-        sum_data = None
-    # after gather, bcast the sum to all other ranks
-    sum_data = pool.bcast(sum_data)
-    if rank == 0 or rank == 2:
-        print(f"{rank=} {sum_data=}")
 
     # print data
     if rank == root:
-        print(all_data, sum_data)
+        print(all_data)
 
 last_n_data = comm.gather(n_data, root=root)
 last_data   = comm.gather(data, root=root)

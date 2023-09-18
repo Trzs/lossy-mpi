@@ -28,11 +28,12 @@ n_data = randint(1, 10)
 data   = None
 
 while True:
+    # simulate graceful failure: if no more work, drop rank from pool
     # decide on current status (i.e. if current rank has data to send)
     if n_data <= 0:
         pool.drop()
 
-    # communicate status to receiving rank
+    # update mask -- this is not necessary, but it does speeding things up
     pool.sync_mask()
 
     # decide to break (root checks if all done) + root: print mask
@@ -47,7 +48,6 @@ while True:
             break
 
     # make one datum and sent to root
-    # data = None
     if n_data > 0:
         data    = randint(101, 200)
         n_data -= 1
