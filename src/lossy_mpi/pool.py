@@ -93,25 +93,26 @@ class Pool(TimeoutComm):
                     continue
                 # don't receive mask data from ranks that are set to "DONE"
                 if Status.is_dead(self.mask[i]):
-                    LOGGER.debug(f"Source {i=} is considered DEAD, skipping", comm=self)
+                    LOGGER.debug(
+                        f"Source {i=} is considered DEAD, skipping", comm=self
+                    )
                     continue
                 # receive mask
+                LOGGER.debug("Initiating recv", comm=self)
                 reqs.append((i, recv_op(source=i, tag=1)))
                 LOGGER.debug(f"Added source {i=} to requests", comm=self)
         else:
-            # make sure that the channel is clear
-            if self.last_req_completed and (self._last_req is not None):
-                LOGGER.debug("Waiting for last isend to complete", comm=self)
-                self.last_req.wait()
             # send data
-            LOGGER.debug("Initiating isend", comm=self)
-            self.last_req = send_op(sendbuf, dest=self.root, tag=1)
+            LOGGER.debug("Initiating send", comm=self)
+            self.push_req(0, send_op(sendbuf, dest=self.root, tag=1))
 
         # complete communications ----------------------------------------------
+        # Collect requests with timeout
         if self.is_root:
-            # Collect requests with timeout
             LOGGER.debug("Collecting requests", comm=self)
-            self.safe_req_wait(recvbuf, failover, reqs, 1)
+            self.safe_req_wait(recvbuf, failover, reqs)
+        else:
+            self.safe_collect_deferred_req(Status.TIMEOUT)
 
     def _exec_scatter_transaction(self, sendbuf, recvbuf, failover, mode):
         """

@@ -38,9 +38,6 @@ class TimeoutComm(object):
         self._timeout = timeout
         self._n_tries = n_tries
 
-        self._last_req = None
-        self._last_req_message = None
-
         # used by deferred requests: requests are a list of (key, val) tuples,
         # messages are a {key: vaule} dict
         self._deferred_req = list()
@@ -71,49 +68,42 @@ class TimeoutComm(object):
         return self._n_tries
 
     @property
-    def last_req(self):
-        return self._last_req
-
-    @last_req.setter
-    def last_req(self, value):
-        self._last_req = value
-
-    @property
     def deferred_req(self):
+        """
+        List of deferred MPI requeses together with each request's index. After
+        collection, responses (messages) are stored in `deferred_msg[index]`.
+        """
         return self._deferred_req
 
     @property
     def deferred_msg(self):
+        """
+        Dictionary (key=idx) of deferred MPI messages
+        """
         return self._deferred_msg
 
     def push_req(self, idx, req):
-        LOGGER.debug(f"Appending request to index {i=}", comm=self)
-        self._deferred_req.append((i, req))
+        """
+        Add MPI request to `deferred_req`. Messages -- once collected -- will be
+        stored in `deferred_msg[idx]`.
+        """
+        LOGGER.debug(f"Appending request to index {idx=}", comm=self)
+        self._deferred_req.append((idx, req))
 
     def safe_collect_deferred_req(self, failover):
+        """
+        Collect (with timeout) all deferred requests, and then delete that list.
+        Messages are collected with a timeout. If a request times out, $failover
+        is stored in its place.
+        """
+        LOGGER.debug("Collecting deferred requests", comm=self)
         self._deferred_msg = dict()
-        self.safe_req_wait(self._deferred_msg, failover)
+        self.safe_req_wait(self._deferred_msg, failover, self._deferred_req)
         self._deferred_req = list()
 
-    @property
-    def last_req_completed(self):
+    def safe_req_wait(self, data, failover, reqs):
         """
-        Check if the last request has been completed
-        """
-        LOGGER.debug(f"Checking {self._last_req=}", comm=self)
-
-        if self._last_req is None:
-            return True
-
-        flag, self._last_req_message = self._last_req.test()
-
-        LOGGER.debug(f"Returning {flag=}", comm=self)
-        return flag
-
-    def safe_req_wait(self, data, failover, reqs, tag):
-        """
-        Collect data from reqs with tag -- if timed out, place $failover in its
-        place
+        Collect data from reqs -- if timed out, place $failover in its place
         """
         LOGGER.debug("Entering safe wait", comm=self)
 
