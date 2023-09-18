@@ -121,6 +121,9 @@ class Pool(TimeoutComm):
         LOGGER.debug(f"Entering scatter transacton, using {mode=}", comm=self)
         recv_op, send_op = OperatorMode.get(mode, self.comm)
 
+        # index of result in recvbuf
+        recvbuf_result_idx = 0
+
         # initiate communications ----------------------------------------------
         if self.is_root:
             LOGGER.debug("Root is initializing communications", comm=self)
@@ -128,7 +131,7 @@ class Pool(TimeoutComm):
             for i in range(self.size):
                 # don't do anything for the root, except updating the data array
                 if i == self.root:
-                    recvbuf[i] == sendbuf
+                    recvbuf[recvbuf_result_idx] == sendbuf
                     continue
                 # don't receive mask data from ranks that are set to "DONE"
                 if Status.is_dead(self.mask[i]):
@@ -142,16 +145,15 @@ class Pool(TimeoutComm):
         else:
             # send data
             LOGGER.debug("Initiating send", comm=self)
-            self.push_req(0, recv_op(source=self.root, tag=2))
+            self.push_req(recvbuf_result_idx, recv_op(source=self.root, tag=2))
 
         # complete communications ----------------------------------------------
         # Collect requests with timeout
         self.safe_collect_deferred_req(failover)
         # Assigned collected data to recvbuf
-        if self.is_root:
+        if not self.is_root:
             LOGGER.debug("Collecting requests", comm=self)
-            for i, msg in self.deferred_msg.items():
-                recvbuf[i] = msg
+            recvbuf[recvbuf_result_idx] = self.deferred_msg[recvbuf_result_idx]
 
     def Gather(self, sendbuf, recvbuf, failover=None):
         """
@@ -166,7 +168,7 @@ class Pool(TimeoutComm):
     def gather(self, data, failover=None):
         """
         Gather data from masked ranks -- excluding "dead ranks". If a timemout
-        occurs, assign the `failover` value. Executed in UPPER mode
+        occurs, assign the `failover` value. Executed in LOWER mode
         """
         LOGGER.debug("Start gather", comm=self)
         recvbuf = [failover for i in range(self.size)]
@@ -176,10 +178,22 @@ class Pool(TimeoutComm):
         return recvbuf
 
     def Bcast(self, buf, failover=None):
-        pass
+        """
+        Bcast data accross masked ranks -- excluding "dead ranks", If a timeout
+        occurs, assign the `failover` value. Excecuted in UPPER mode
+        """
+        LOGGER.debug("Start Barrier", comm=self)
+        self._exec_bcast_transaction(buf, buf, failover, OperatorMode.UPPER)
 
     def bcast(self, obj, failover=None):
-        pass
+        """
+        Bcast data accross masked ranks -- excluding "dead ranks", If a timeout
+        occurs, assign the `failover` value. Excecuted in LOWER mode
+        """
+        LOGGER.debug("Start barrier", comm=self)
+        recvbuf = [failover]
+        self._exec_bcast_transaction(obj, recvbuf, failover, OperatorMode.LOWER)
+        return recvbuf[0]
 
     def Barrier(self):
         """
