@@ -29,7 +29,7 @@ class MPIStyleAdapter(LoggerAdapter):
 
 
 def getLogger(name):
-    return MPIStyleAdapter(logging.getLogger(name))
+    return MPIStyleAdapter(logging.getLogger(name), None)
 
 
 class AutoEnum(Enum):
