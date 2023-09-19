@@ -1,13 +1,11 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+from random import randint
 from sys import argv
 
-from mpi4py         import MPI
 from lossy_mpi.pool import Pool, Status
-
-from random import randint
-
+from mpi4py import MPI
 
 verbose = False
 if len(argv) > 1:
@@ -25,7 +23,7 @@ pool = Pool(comm, root, timeout=2, n_tries=10)
 pool.ready()
 
 n_data = randint(1, 10)
-data   = None
+data = None
 
 while True:
     # simulate unexpected failure: if no more work, then stop responding
@@ -39,7 +37,8 @@ while True:
 
     # decide to break (root checks if all done) + root: print mask
     if rank == root:
-        if verbose: print(pool.mask, flush=True)
+        if verbose:
+            print(pool.mask, flush=True)
 
         if pool.done:
             break
@@ -50,7 +49,7 @@ while True:
 
     # make one datum and sent to root
     if n_data > 0:
-        data    = randint(101, 200)
+        data = randint(101, 200)
         n_data -= 1
 
     # communicate data
@@ -61,11 +60,10 @@ while True:
         print(all_data)
 
 last_n_data = comm.gather(n_data, root=root)
-last_data   = comm.gather(data, root=root)
+last_data = comm.gather(data, root=root)
 
 if rank == root:
     print(f"{last_n_data=}")
     print(f"{last_data=}")
 
 comm.barrier()
-

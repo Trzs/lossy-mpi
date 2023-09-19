@@ -1,11 +1,10 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from time    import sleep 
-from enum    import auto, unique
+from enum import auto, unique
+from time import sleep
 
-from .       import getLogger, AutoEnum
-
+from . import AutoEnum, getLogger
 
 LOGGER = getLogger(__name__)
 
@@ -43,9 +42,7 @@ class TimeoutComm(object):
         self._deferred_req = list()
         self._deferred_msg = dict()
 
-        LOGGER.debug(
-            f"Initialized Timeout Communicator with {timeout=} and {n_tries=}"
-        )
+        LOGGER.debug(f"Initialized Timeout Communicator with {timeout=} and {n_tries=}")
 
     @property
     def comm(self):
@@ -120,4 +117,4 @@ class TimeoutComm(object):
                     break
                 else:
                     LOGGER.debug(f"Sleeping for message {i=}", comm=self)
-                    sleep(self.timeout/self.n_tries)
+                    sleep(self.timeout / self.n_tries)

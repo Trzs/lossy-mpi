@@ -1,13 +1,13 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from enum    import auto, unique
+from enum import auto, unique
 
-from .       import getLogger, AutoEnum
-from .comms  import TimeoutComm, OperatorMode
-
+from . import AutoEnum, getLogger
+from .comms import OperatorMode, TimeoutComm
 
 LOGGER = getLogger(__name__)
+
 
 @unique
 class Signal(AutoEnum):
@@ -44,7 +44,7 @@ class Pool(TimeoutComm):
         # Assumption: com, rank, size, and root do not change
         super().__init__(comm, timeout, n_tries)
 
-        self._root    = root
+        self._root = root
         self._is_root = self.rank == root
 
         self._mask = [Status.UNINIT for i in range(self.size)]
@@ -92,9 +92,7 @@ class Pool(TimeoutComm):
                     continue
                 # don't receive mask data from ranks that are set to "DONE"
                 if Status.is_dead(self.mask[i]):
-                    LOGGER.debug(
-                        f"Source {i=} is considered DEAD, skipping", comm=self
-                    )
+                    LOGGER.debug(f"Source {i=} is considered DEAD, skipping", comm=self)
                     continue
                 # receive mask
                 LOGGER.debug("Initiating recv", comm=self)
@@ -135,9 +133,7 @@ class Pool(TimeoutComm):
                     continue
                 # don't receive mask data from ranks that are set to "DONE"
                 if Status.is_dead(self.mask[i]):
-                    LOGGER.debug(
-                        f"Source {i=} is considered DEAD, skipping", comm=self
-                    )
+                    LOGGER.debug(f"Source {i=} is considered DEAD, skipping", comm=self)
                     continue
                 # receive mask
                 LOGGER.debug("Initiating recv", comm=self)
@@ -161,10 +157,8 @@ class Pool(TimeoutComm):
         occurs, assign the `failover` value. Executed in UPPER mode
         """
         LOGGER.debug("Start Gather", comm=self)
-        self._exec_gather_transaction(
-            sendbuf, recvbuf, failover, OperatorMode.UPPER
-        )
- 
+        self._exec_gather_transaction(sendbuf, recvbuf, failover, OperatorMode.UPPER)
+
     def gather(self, data, failover=None):
         """
         Gather data from masked ranks -- excluding "dead ranks". If a timemout
@@ -172,9 +166,7 @@ class Pool(TimeoutComm):
         """
         LOGGER.debug("Start gather", comm=self)
         recvbuf = [failover for i in range(self.size)]
-        self._exec_gather_transaction(
-            data, recvbuf, failover, OperatorMode.LOWER
-        )
+        self._exec_gather_transaction(data, recvbuf, failover, OperatorMode.LOWER)
         return recvbuf
 
     def Bcast(self, buf, failover=None):
@@ -246,4 +238,3 @@ class Pool(TimeoutComm):
                 break
 
         return break_root
-

@@ -4,17 +4,12 @@
 __version__ = "0.1.0"
 
 import logging
-
-from os      import environ
-from logging import basicConfig, LoggerAdapter
-from enum    import Enum
-
+from enum import Enum
+from logging import LoggerAdapter, basicConfig
+from os import environ
 
 FORMAT = "[%(levelname)8s | %(filename)s:%(lineno)s - %(module)s.%(funcName)s() ] %(message)s"
-basicConfig(
-    format = FORMAT,
-    level  = environ.get("LOSSY_MPI_LOG", "INFO").upper()
-)
+basicConfig(format=FORMAT, level=environ.get("LOSSY_MPI_LOG", "INFO").upper())
 
 
 class MPIStyleAdapter(LoggerAdapter):
@@ -35,4 +30,3 @@ def getLogger(name):
 class AutoEnum(Enum):
     def _generate_next_value_(name, start, count, last_values):
         return count
-

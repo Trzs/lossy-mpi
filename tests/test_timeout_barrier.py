@@ -1,13 +1,11 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+from random import randint
 from sys import argv
 
-from mpi4py         import MPI
 from lossy_mpi.pool import Pool, Status
-
-from random import randint
-
+from mpi4py import MPI
 
 verbose = False
 if len(argv) > 1:
@@ -38,7 +36,8 @@ while True:
 
     # decide to break (root checks if all done) + root: print mask
     if rank == root:
-        if verbose: print(pool.mask, flush=True)
+        if verbose:
+            print(pool.mask, flush=True)
 
         if pool.done:
             break
@@ -61,4 +60,3 @@ if rank == root:
     print(f"{last_n_data=}")
 
 comm.barrier()
-
