@@ -61,10 +61,9 @@ def run_cli():
     comm.barrier()
 
 
-def check_masks(a, b):
+def check_mask(a, b, n_iter, size, rank, n_data):
     for x, y in zip(a, b):
         assert x == y
-
 
 
 @pytest.mark.mpi(min_size=4)
@@ -86,8 +85,6 @@ def test_dropout_barrier():
     mask_ref = [Status.READY]*size
 
     while True:
-
-
         # simulate graceful failure: if no more work, drop rank from pool
         # decide on current status (i.e. if current rank has data to send)
         if n_data <= 0:
@@ -100,7 +97,7 @@ def test_dropout_barrier():
         # checking that the mask is what we expect it to be (at this stage of
         # test test)
         if rank == root:
-            check_masks(pool.mask, mask_ref)
+            check_mask(pool.mask, mask_ref, n_iter, size, rank, n_data)
 
             if pool.done:
                 break
