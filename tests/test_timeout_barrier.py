@@ -101,7 +101,7 @@ def test_timeout_barrier():
                 break
 
         # Update what we expect the reference mask to be: after each iteration
-        # we drom the highest Status.READY rank
+        # we drop the highest Status.READY rank
         n_iter += 1
         mask_ref[-n_iter] = Status.TIMEOUT
 

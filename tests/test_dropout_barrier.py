@@ -107,11 +107,12 @@ def test_dropout_barrier():
                 break
 
         # Update what we expect the reference mask to be: after each iteration
-        # we drom the highest Status.READY rank
+        # we drop the highest Status.READY rank
         n_iter += 1
         mask_ref[-n_iter] = Status.DONE
 
-        # make one datum and sent to root
+        # decreate the local counter => this will be used to decide if a rank is
+        # to be dropped from the communicator
         if n_data > 0:
             n_data -= 1
 
