@@ -45,7 +45,8 @@ def run_cli():
             if pool.status is Status.DONE:
                 break
 
-        # make one datum and sent to root
+        # Update what we expect the reference mask to be: after each iteration
+        # we drop a random Status.READY rank
         if n_data > 0:
             n_data -= 1
 
@@ -61,7 +62,7 @@ def run_cli():
     comm.barrier()
 
 
-def check_mask(a, b, n_iter, size, rank, n_data):
+def check_mask(a, b):
     for x, y in zip(a, b):
         assert x == y
 
@@ -97,7 +98,7 @@ def test_dropout_barrier():
         # checking that the mask is what we expect it to be (at this stage of
         # test test)
         if rank == root:
-            check_mask(pool.mask, mask_ref, n_iter, size, rank, n_data)
+            check_mask(pool.mask, mask_ref)
 
             if pool.done:
                 break
@@ -106,7 +107,7 @@ def test_dropout_barrier():
             if pool.status is Status.DONE:
                 break
 
-        # Update what we expect the reference mask to be: after each iteration
+        # update what we expect the reference mask to be: after each iteration
         # we drop the highest Status.READY rank
         n_iter += 1
         mask_ref[-n_iter] = Status.DONE
