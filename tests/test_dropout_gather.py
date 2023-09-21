@@ -21,6 +21,7 @@ def run_cli():
     root = 0
 
     pool = Pool(comm, root, timeout=2, n_tries=10)
+    pool.advance_transaction_counter(200)
     pool.ready()
 
     n_data = randint(1, 10)

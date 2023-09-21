@@ -3,7 +3,7 @@
 
 from enum import auto, unique
 
-from . import AutoEnum, getLogger
+from . import AutoEnum, getLogger, Singleton
 from .comms import OperatorMode, TimeoutComm
 
 LOGGER = getLogger(__name__)
@@ -71,6 +71,20 @@ class Pool(TimeoutComm):
     def mask(self):
         return self._mask
 
+    @property
+    def transaction_counter(self):
+        return self._txn_ct
+
+    def next_tag(self):
+        # use txn_ct as tag and increment
+        tag = self._txn_ct;
+        self._txn_ct += 1
+        return tag
+
+    def advance_transaction_counter(self, val):
+        assert val > 0
+        self._txn_ct += val;
+
     def ready(self):
         self._status = Status.READY
 
@@ -82,9 +96,8 @@ class Pool(TimeoutComm):
         Gather data from masked ranks -- excluding "dead ranks". If a timemout
         occurs, assign the `failover` value.
         """
-        # use txn_ct as tag and increment
-        tag = self._txn_ct;
-        self._txn_ct += 1
+        # use unique tag
+        tag = self.next_tag();
 
         LOGGER.debug(f"Entering gather transacton, using: {mode=}, {tag=}", comm=self)
         recv_op, send_op = OperatorMode.get(mode, self.comm)
@@ -124,9 +137,8 @@ class Pool(TimeoutComm):
         Scatter data to masked ranks -- excluding "dead ranks". If a timemout
         occurs, assign the `failover` value.
         """
-        # use txn_ct as tag and increment
-        tag = self._txn_ct;
-        self._txn_ct += 1
+        # use unique tag
+        tag = self.next_tag();
 
         LOGGER.debug(f"Entering scatter transacton, using: {mode=}, {tag=}", comm=self)
         recv_op, send_op = OperatorMode.get(mode, self.comm)
@@ -234,13 +246,13 @@ class Pool(TimeoutComm):
         """
         LOGGER.debug("Start sync'ing masks", comm=self)
         # input sanity checking
-        assert isinstance(self.status, Status)
+        assert isinstance(self.status, Status), f"{type(self.status)=}"
         self._exec_gather_transaction(
             self.status, self.mask, Status.TIMEOUT, OperatorMode.LOWER
         )
         # output santity checking
         for i in self.mask:
-            assert isinstance(i, Status)
+            assert isinstance(i, Status), f"{type(i)=}"
 
     @property
     def done(self):

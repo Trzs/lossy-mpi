@@ -5,6 +5,7 @@ import pytest
 from random import randint
 from sys import argv
 
+
 def run_cli():
     from lossy_mpi.pool import Pool, Status
     from mpi4py import MPI
@@ -93,6 +94,7 @@ def test_dropout_gather_bcast():
     root = 0
 
     pool = Pool(comm, root, timeout=2, n_tries=10)
+    pool.advance_transaction_counter(300)
     pool.ready()
 
     # high-numbered ranks will "drop out" first
@@ -158,4 +160,4 @@ def test_dropout_gather_bcast():
 
 
 if __name__ == "__main__":
-    test_dropout_gather_bcast()
+    run_cli()

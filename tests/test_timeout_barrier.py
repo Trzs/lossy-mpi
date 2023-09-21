@@ -74,6 +74,7 @@ def test_timeout_barrier():
     root = 0
 
     pool = Pool(comm, root, timeout=2, n_tries=10)
+    pool.advance_transaction_counter(400)
     pool.ready()
 
     # high-numbered ranks will "drop out" first
