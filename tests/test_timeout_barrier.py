@@ -58,7 +58,7 @@ def run_cli():
     comm.barrier()
 
 
-def check_mask(a, b, n_iter, size, rank, n_data):
+def check_mask(a, b):
     for x, y in zip(a, b):
         assert x == y
 
@@ -95,7 +95,7 @@ def test_timeout_barrier():
         # checking that the mask is what we expect it to be (at this stage of
         # test test)
         if rank == root:
-            check_mask(pool.mask, mask_ref, n_iter, size, rank, n_data)
+            check_mask(pool.mask, mask_ref)
 
             if pool.done:
                 break
