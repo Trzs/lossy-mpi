@@ -3,6 +3,7 @@
 
 from enum import auto, unique
 from time import sleep
+from mpi4py import MPI
 
 from . import AutoEnum, getLogger
 
@@ -40,6 +41,7 @@ class TimeoutComm(object):
         # used by deferred requests: requests are a list of (key, val) tuples,
         # messages are a {key: vaule} dict
         self._deferred_req = list()
+        self._rejected_req = list()
         self._deferred_msg = dict()
 
         LOGGER.debug(f"Initialized Timeout Communicator with {timeout=} and {n_tries=}")
@@ -87,7 +89,7 @@ class TimeoutComm(object):
         LOGGER.debug(f"Appending request to index {idx=}", comm=self)
         self._deferred_req.append((idx, req))
 
-    def safe_collect_deferred_req(self, failover):
+    def safe_collect_deferred_req(self, failover, tag):
         """
         Collect (with timeout) all deferred requests, and then delete that list.
         Messages are collected with a timeout. If a request times out, $failover
@@ -95,10 +97,15 @@ class TimeoutComm(object):
         """
         LOGGER.debug("Collecting deferred requests", comm=self)
         self._deferred_msg = dict()
-        self.safe_req_wait(self._deferred_msg, failover, self._deferred_req)
+        self.safe_req_wait(self._deferred_msg, failover, self._deferred_req, tag)
         self._deferred_req = list()
+        # "Rescue" requests that don't have matching tags
+        for r in self._rejected_req:
+            LOGGER.debug(f"Rejected: {r=}", comm=self)
+            self._deferred_req.append(r)
+        self._rejected_req = list()
 
-    def safe_req_wait(self, data, failover, reqs):
+    def safe_req_wait(self, data, failover, reqs, tag):
         """
         Collect data from reqs -- if timed out, place $failover in its place
         """
@@ -109,12 +116,30 @@ class TimeoutComm(object):
             data[i] = failover
             # try n_tries many times to get a response, if none is received in
             # $timeout seconds, the failover value is not overwritten
-            for _ in range(self.n_tries):
-                flag, message = req.test()
-                LOGGER.debug(f"Looking for message {i=}: {flag=}", comm=self)
-                if flag:
+            try_ct = 0
+            while True:
+                status = MPI.Status()
+                flag, message = req.test(status)
+                LOGGER.debug(f"Looking for message {i=}: {flag=} {tag=}", comm=self)
+                if flag and (status.Get_tag() == tag):
+                    LOGGER.debug(
+                        f"Tag match for: {flag=} {status.tag=}, {tag=}", comm=self
+                    )
                     data[i] = message
                     break
+                elif flag and (status.Get_tag() != tag):
+                    # Ignore send req's
+                    if status.count == 0:
+                        break
+                    LOGGER.debug(
+                        f"Tag mismatch for: {flag=} {status.tag=}, {tag=}", comm=self
+                    )
+                    if (i, req) not in self._rejected_req:
+                        LOGGER.info(f"{req=}")
+                        self._rejected_req.append((i, req))
                 else:
+                    try_ct += 1
+                    if try_ct > self.n_tries:
+                        break
                     LOGGER.debug(f"Sleeping for message {i=}", comm=self)
                     sleep(self.timeout / self.n_tries)

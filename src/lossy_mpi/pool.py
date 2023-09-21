@@ -47,6 +47,10 @@ class Pool(TimeoutComm):
         self._root = root
         self._is_root = self.rank == root
 
+        # tag messages by transaction count => ensure that messages are read in
+        # the order that they arrive in
+        self._txn_ct = 0;
+
         self._mask = [Status.UNINIT for i in range(self.size)]
 
         LOGGER.debug(f"Initialized pool at {root=}", comm=self)
@@ -78,7 +82,11 @@ class Pool(TimeoutComm):
         Gather data from masked ranks -- excluding "dead ranks". If a timemout
         occurs, assign the `failover` value.
         """
-        LOGGER.debug(f"Entering gather transacton, using {mode=}", comm=self)
+        # use txn_ct as tag and increment
+        tag = self._txn_ct;
+        self._txn_ct += 1
+
+        LOGGER.debug(f"Entering gather transacton, using: {mode=}, {tag=}", comm=self)
         recv_op, send_op = OperatorMode.get(mode, self.comm)
 
         # initiate communications ----------------------------------------------
@@ -96,15 +104,15 @@ class Pool(TimeoutComm):
                     continue
                 # receive mask
                 LOGGER.debug("Initiating recv", comm=self)
-                self.push_req(i, recv_op(source=i, tag=1))
+                self.push_req(i, recv_op(source=i, tag=tag))
         else:
             # send data
             LOGGER.debug("Initiating send", comm=self)
-            self.push_req(0, send_op(sendbuf, dest=self.root, tag=1))
+            self.push_req(0, send_op(sendbuf, dest=self.root, tag=tag))
 
         # complete communications ----------------------------------------------
         # Collect requests with timeout
-        self.safe_collect_deferred_req(failover)
+        self.safe_collect_deferred_req(failover, tag=tag)
         # Assigned collected data to recvbuf
         if self.is_root:
             LOGGER.debug("Collecting requests", comm=self)
@@ -116,7 +124,11 @@ class Pool(TimeoutComm):
         Scatter data to masked ranks -- excluding "dead ranks". If a timemout
         occurs, assign the `failover` value.
         """
-        LOGGER.debug(f"Entering scatter transacton, using {mode=}", comm=self)
+        # use txn_ct as tag and increment
+        tag = self._txn_ct;
+        self._txn_ct += 1
+
+        LOGGER.debug(f"Entering scatter transacton, using: {mode=}, {tag=}", comm=self)
         recv_op, send_op = OperatorMode.get(mode, self.comm)
 
         # index of result in recvbuf
@@ -137,15 +149,15 @@ class Pool(TimeoutComm):
                     continue
                 # receive mask
                 LOGGER.debug("Initiating recv", comm=self)
-                self.push_req(i, send_op(sendbuf, dest=i, tag=2))
+                self.push_req(i, send_op(sendbuf, dest=i, tag=tag))
         else:
             # send data
             LOGGER.debug("Initiating send", comm=self)
-            self.push_req(recvbuf_result_idx, recv_op(source=self.root, tag=2))
+            self.push_req(recvbuf_result_idx, recv_op(source=self.root, tag=tag))
 
         # complete communications ----------------------------------------------
         # Collect requests with timeout
-        self.safe_collect_deferred_req(failover)
+        self.safe_collect_deferred_req(failover, tag=tag)
         # Assigned collected data to recvbuf
         if not self.is_root:
             LOGGER.debug("Collecting requests", comm=self)
@@ -200,6 +212,12 @@ class Pool(TimeoutComm):
         )
         if Signal.TIMEOUT in recvbuf:
             LOGGER.info("Receiving unexpected timeouts", comm=self)
+        recvbuf = [None]
+        self._exec_bcast_transaction(
+            Signal.OK, recvbuf, Signal.TIMEOUT, OperatorMode.LOWER
+        )
+        if recvbuf[0] is Signal.TIMEOUT:
+            LOGGER.info("Receiving unexpected timeouts", comm=self)
 
     def barrier(self):
         """
@@ -215,9 +233,14 @@ class Pool(TimeoutComm):
         Syncs masks accross all ranks -- excluding "dead ranks"
         """
         LOGGER.debug("Start sync'ing masks", comm=self)
+        # input sanity checking
+        assert isinstance(self.status, Status)
         self._exec_gather_transaction(
             self.status, self.mask, Status.TIMEOUT, OperatorMode.LOWER
         )
+        # output santity checking
+        for i in self.mask:
+            assert isinstance(i, Status)
 
     @property
     def done(self):
