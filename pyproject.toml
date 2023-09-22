@@ -15,4 +15,5 @@ dev = [
     "pytest-mpi ==0.6",
     "ruff ==0.0.290",
     "twine ==4.0.2",
+    "build ==1.0.3",
 ]
