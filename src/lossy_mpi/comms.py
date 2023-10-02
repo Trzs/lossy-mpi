@@ -69,7 +69,7 @@ class TimeoutComm(object):
     @property
     def deferred_req(self):
         """
-        List of deferred MPI requeses together with each request's index. After
+        List of deferred MPI requests together with each request's index. After
         collection, responses (messages) are stored in `deferred_msg[index]`.
         """
         return self._deferred_req
