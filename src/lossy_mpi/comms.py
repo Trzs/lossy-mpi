@@ -39,7 +39,7 @@ class TimeoutComm(object):
         self._n_tries = n_tries
 
         # used by deferred requests: requests are a list of (key, val) tuples,
-        # messages are a {key: vaule} dict
+        # messages are a {key: value} dict
         self._deferred_req = list()
         self._rejected_req = list()
         self._deferred_msg = dict()
