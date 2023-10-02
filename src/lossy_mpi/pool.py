@@ -160,11 +160,11 @@ class Pool(TimeoutComm):
                     LOGGER.debug(f"Source {i=} is considered DEAD, skipping", comm=self)
                     continue
                 # receive mask
-                LOGGER.debug("Initiating recv", comm=self)
+                LOGGER.debug("Initiating send", comm=self)
                 self.push_req(i, send_op(sendbuf, dest=i, tag=tag))
         else:
             # send data
-            LOGGER.debug("Initiating send", comm=self)
+            LOGGER.debug("Initiating recv", comm=self)
             self.push_req(recvbuf_result_idx, recv_op(source=self.root, tag=tag))
 
         # complete communications ----------------------------------------------
