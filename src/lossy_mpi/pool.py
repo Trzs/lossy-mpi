@@ -213,7 +213,7 @@ class Pool(TimeoutComm):
 
     def Barrier(self):
         """
-        Barrier on all masked ranks -- exlcuding "dead ranks". Non-dead ranks
+        Barrier on all masked ranks -- excluding "dead ranks". Non-dead ranks
         can still time out. If that occurs, the barrier proceeds.
         """
         LOGGER.debug("Start Barrier", comm=self)
