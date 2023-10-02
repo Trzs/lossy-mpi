@@ -155,15 +155,15 @@ class Pool(TimeoutComm):
                 if i == self.root:
                     recvbuf[recvbuf_result_idx] = sendbuf
                     continue
-                # don't receive mask data from ranks that are set to "DONE"
+                # don't send mask data to ranks that are set to "DONE"
                 if Status.is_dead(self.mask[i]):
                     LOGGER.debug(f"Source {i=} is considered DEAD, skipping", comm=self)
                     continue
-                # receive mask
+                # send mask
                 LOGGER.debug("Initiating send", comm=self)
                 self.push_req(i, send_op(sendbuf, dest=i, tag=tag))
         else:
-            # send data
+            # receive data
             LOGGER.debug("Initiating recv", comm=self)
             self.push_req(recvbuf_result_idx, recv_op(source=self.root, tag=tag))
 
